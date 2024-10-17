@@ -4,7 +4,7 @@ from pathlib import Path
 ## Get the parent directory of this file
 dir_parent = Path(__file__).parent
 
-with open(str(dir_parent / "roicat" / "__init__.py"), "r") as f:
+with open(str(dir_parent / "romatch" / "__init__.py"), "r") as f:
     for line in f:
         if line.startswith("__version__"):
             version = line.split("=")[1].strip().replace("\"", "").replace("\'", "")
