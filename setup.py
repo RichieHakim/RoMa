@@ -9,11 +9,16 @@ with open(str(dir_parent / "romatch" / "__init__.py"), "r") as f:
         if line.startswith("__version__"):
             version = line.split("=")[1].strip().replace("\"", "").replace("\'", "")
             break
+## Get README.md
+with open(str(dir_parent / "README.md"), "r") as f:
+    readme = f.read()
 
 setup(
     name="romatch",
     packages=find_packages(include=("romatch*",)),
     version=version,
     author="Johan Edstedt",
+    long_description=readme,
+    long_description_content_type="text/markdown",
     install_requires=open("requirements.txt", "r").read().split("\n"),
 )
