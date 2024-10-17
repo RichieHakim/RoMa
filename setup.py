@@ -14,7 +14,7 @@ with open(str(dir_parent / "README.md"), "r") as f:
     readme = f.read()
 
 setup(
-    name="romatch",
+    name="romatch_roicat",
     packages=find_packages(include=("romatch*",)),
     version=version,
     author="Johan Edstedt",
