@@ -6,3 +6,5 @@ RANK = int(os.environ.get('RANK', default = 0))
 GLOBAL_STEP = 0
 STEP_SIZE = 1
 LOCAL_RANK = -1
+
+__version__ = "0.1.0"
