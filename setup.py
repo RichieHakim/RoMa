@@ -10,7 +10,7 @@ with open(str(dir_parent / "romatch" / "__init__.py"), "r") as f:
             version = line.split("=")[1].strip().replace("\"", "").replace("\'", "")
             break
 ## Get README.md
-with open(str(dir_parent / "README.md"), "r") as f:
+with open(str(dir_parent / "README.md"), "r", encoding="utf-8") as f:
     readme = f.read()
 
 setup(
