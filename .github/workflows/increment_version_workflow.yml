@@ -34,6 +34,6 @@ jobs:
             - name: Commit changes
               run: |
                 git status
-                git add roicat/__init__.py
+                git add romatch/__init__.py
                 git commit -m "Increment version number"
                 git push
