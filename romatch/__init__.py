@@ -7,4 +7,4 @@ GLOBAL_STEP = 0
 STEP_SIZE = 1
 LOCAL_RANK = -1
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
