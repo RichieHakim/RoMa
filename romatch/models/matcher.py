@@ -11,7 +11,7 @@ from PIL import Image
 
 from romatch.utils import get_tuple_transform_ops
 from romatch.utils.local_correlation import local_correlation
-from romatch.utils.utils import cls_to_flow_refine, get_autocast_params
+from romatch.utils.utils import check_rgb, cls_to_flow_refine, get_autocast_params, check_not_i16
 from romatch.utils.kde import kde
 
 class ConvRefiner(nn.Module):
@@ -573,12 +573,30 @@ class RegressionMatcher(nn.Module):
         kpts_B = torch.stack((2/W_B * kpts_B[...,0] - 1, 2/H_B * kpts_B[...,1] - 1),axis=-1)
         return kpts_A, kpts_B
 
-    def match_keypoints(self, x_A, x_B, warp, certainty, return_tuple = True, return_inds = False):
-        x_A_to_B = F.grid_sample(warp[...,-2:].permute(2,0,1)[None], x_A[None,None], align_corners = False, mode = "bilinear")[0,:,0].mT
-        cert_A_to_B = F.grid_sample(certainty[None,None,...], x_A[None,None], align_corners = False, mode = "bilinear")[0,0,0]
+    def match_keypoints(
+        self, x_A, x_B, warp, certainty, return_tuple=True, return_inds=False, max_dist = 0.005, cert_th = 0,
+    ):
+        x_A_to_B = F.grid_sample(
+            warp[..., -2:].permute(2, 0, 1)[None],
+            x_A[None, None],
+            align_corners=False,
+            mode="bilinear",
+        )[0, :, 0].mT
+        cert_A_to_B = F.grid_sample(
+            certainty[None, None, ...],
+            x_A[None, None],
+            align_corners=False,
+            mode="bilinear",
+        )[0, 0, 0]
         D = torch.cdist(x_A_to_B, x_B)
-        inds_A, inds_B = torch.nonzero((D == D.min(dim=-1, keepdim = True).values) * (D == D.min(dim=-2, keepdim = True).values) * (cert_A_to_B[:,None] > self.sample_thresh), as_tuple = True)
-        
+        inds_A, inds_B = torch.nonzero(
+            (D == D.min(dim=-1, keepdim=True).values)
+            * (D == D.min(dim=-2, keepdim=True).values)
+            * (cert_A_to_B[:, None] > cert_th)
+            * (D < max_dist),
+            as_tuple=True,
+        )
+
         if return_tuple:
             if return_inds:
                 return inds_A, inds_B
@@ -586,25 +604,38 @@ class RegressionMatcher(nn.Module):
                 return x_A[inds_A], x_B[inds_B]
         else:
             if return_inds:
-                return torch.cat((inds_A, inds_B),dim=-1)
+                return torch.cat((inds_A, inds_B), dim=-1)
             else:
-                return torch.cat((x_A[inds_A], x_B[inds_B]),dim=-1)
+                return torch.cat((x_A[inds_A], x_B[inds_B]), dim=-1)
             
     @torch.inference_mode()
     def match(
         self,
-        im_A_path,
-        im_B_path,
+        im_A_input,
+        im_B_input,
         *args,
         batched=False,
-        device = None,
+        device=None,
     ):
         if device is None:
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        if isinstance(im_A_path, (str, os.PathLike)):
-            im_A, im_B = Image.open(im_A_path).convert("RGB"), Image.open(im_B_path).convert("RGB")
+
+        # Check if inputs are file paths or already loaded images
+        if isinstance(im_A_input, (str, os.PathLike)):
+            im_A = Image.open(im_A_input)
+            check_not_i16(im_A)
+            im_A = im_A.convert("RGB")
         else:
-            im_A, im_B = im_A_path, im_B_path 
+            check_rgb(im_A_input)
+            im_A = im_A_input
+
+        if isinstance(im_B_input, (str, os.PathLike)):
+            im_B = Image.open(im_B_input)
+            check_not_i16(im_B)
+            im_B = im_B.convert("RGB")
+        else:
+            check_rgb(im_B_input)
+            im_B = im_B_input
 
         symmetric = self.symmetric
         self.train(False)
@@ -616,9 +647,9 @@ class RegressionMatcher(nn.Module):
                 # Get images in good format
                 ws = self.w_resized
                 hs = self.h_resized
-                
+
                 test_transform = get_tuple_transform_ops(
-                    resize=(hs, ws), normalize=True, clahe = False
+                    resize=(hs, ws), normalize=True, clahe=False
                 )
                 im_A, im_B = test_transform((im_A, im_B))
                 batch = {"im_A": im_A[None].to(device), "im_B": im_B[None].to(device)}
@@ -633,20 +664,20 @@ class RegressionMatcher(nn.Module):
             finest_scale = 1
             # Run matcher
             if symmetric:
-                corresps  = self.forward_symmetric(batch)
+                corresps = self.forward_symmetric(batch)
             else:
-                corresps = self.forward(batch, batched = True)
+                corresps = self.forward(batch, batched=True)
 
             if self.upsample_preds:
                 hs, ws = self.upsample_res
-            
+
             if self.attenuate_cert:
                 low_res_certainty = F.interpolate(
-                corresps[16]["certainty"], size=(hs, ws), align_corners=False, mode="bilinear"
+                    corresps[16]["certainty"], size=(hs, ws), align_corners=False, mode="bilinear"
                 )
                 cert_clamp = 0
                 factor = 0.5
-                low_res_certainty = factor*low_res_certainty*(low_res_certainty < cert_clamp)
+                low_res_certainty = factor * low_res_certainty * (low_res_certainty < cert_clamp)
 
             if self.upsample_preds:
                 finest_corresps = corresps[finest_scale]
@@ -654,38 +685,39 @@ class RegressionMatcher(nn.Module):
                 test_transform = get_tuple_transform_ops(
                     resize=(hs, ws), normalize=True
                 )
-                if isinstance(im_A_path, (str, os.PathLike)):
-                    im_A, im_B = Image.open(im_A_path).convert("RGB"), Image.open(im_B_path).convert("RGB")
+                if isinstance(im_A_input, (str, os.PathLike)):
+                    im_A, im_B = test_transform(
+                        (Image.open(im_A_input).convert('RGB'), Image.open(im_B_input).convert('RGB')))
                 else:
-                    im_A, im_B = im_A_path, im_B_path                 
-                im_A, im_B = test_transform((im_A, im_B))
+                    im_A, im_B = test_transform((im_A_input, im_B_input))
+
                 im_A, im_B = im_A[None].to(device), im_B[None].to(device)
                 scale_factor = math.sqrt(self.upsample_res[0] * self.upsample_res[1] / (self.w_resized * self.h_resized))
                 batch = {"im_A": im_A, "im_B": im_B, "corresps": finest_corresps}
                 if symmetric:
-                    corresps = self.forward_symmetric(batch, upsample = True, batched=True, scale_factor = scale_factor)
+                    corresps = self.forward_symmetric(batch, upsample=True, batched=True, scale_factor=scale_factor)
                 else:
-                    corresps = self.forward(batch, batched = True, upsample=True, scale_factor = scale_factor)
-            
-            im_A_to_im_B = corresps[finest_scale]["flow"] 
+                    corresps = self.forward(batch, batched=True, upsample=True, scale_factor=scale_factor)
+
+            im_A_to_im_B = corresps[finest_scale]["flow"]
             certainty = corresps[finest_scale]["certainty"] - (low_res_certainty if self.attenuate_cert else 0)
             if finest_scale != 1:
                 im_A_to_im_B = F.interpolate(
-                im_A_to_im_B, size=(hs, ws), align_corners=False, mode="bilinear"
+                    im_A_to_im_B, size=(hs, ws), align_corners=False, mode="bilinear"
                 )
                 certainty = F.interpolate(
-                certainty, size=(hs, ws), align_corners=False, mode="bilinear"
+                    certainty, size=(hs, ws), align_corners=False, mode="bilinear"
                 )
             im_A_to_im_B = im_A_to_im_B.permute(
                 0, 2, 3, 1
-                )
+            )
             # Create im_A meshgrid
             im_A_coords = torch.meshgrid(
                 (
                     torch.linspace(-1 + 1 / hs, 1 - 1 / hs, hs, device=device),
                     torch.linspace(-1 + 1 / ws, 1 - 1 / ws, ws, device=device),
                 ),
-                indexing = 'ij'
+                indexing='ij'
             )
             im_A_coords = torch.stack((im_A_coords[1], im_A_coords[0]))
             im_A_coords = im_A_coords[None].expand(b, 2, hs, ws)
@@ -693,14 +725,14 @@ class RegressionMatcher(nn.Module):
             im_A_coords = im_A_coords.permute(0, 2, 3, 1)
             if (im_A_to_im_B.abs() > 1).any() and True:
                 wrong = (im_A_to_im_B.abs() > 1).sum(dim=-1) > 0
-                certainty[wrong[:,None]] = 0
+                certainty[wrong[:, None]] = 0
             im_A_to_im_B = torch.clamp(im_A_to_im_B, -1, 1)
             if symmetric:
                 A_to_B, B_to_A = im_A_to_im_B.chunk(2)
                 q_warp = torch.cat((im_A_coords, A_to_B), dim=-1)
                 im_B_coords = im_A_coords
                 s_warp = torch.cat((B_to_A, im_B_coords), dim=-1)
-                warp = torch.cat((q_warp, s_warp),dim=2)
+                warp = torch.cat((q_warp, s_warp), dim=2)
                 certainty = torch.cat(certainty.chunk(2), dim=3)
             else:
                 warp = torch.cat((im_A_coords, im_A_to_im_B), dim=-1)
