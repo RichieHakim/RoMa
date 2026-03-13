@@ -308,9 +308,13 @@ class GP(nn.Module):
             K_yy_inv = torch.linalg.inv(K_yy + sigma_noise)
             mu_x = K_xy.matmul(K_yy_inv.matmul(f))
         else:
-            # faster inference, possibly also useful for training
-            L_t = torch.linalg.cholesky(K_yy + sigma_noise)
-            pos_emb = torch.cholesky_solve(f.reshape(b, h2 * w2, d), L_t, upper=False)
+            # faster inference via cholesky, with fallback for MPS
+            try:
+                L_t = torch.linalg.cholesky(K_yy + sigma_noise)
+                pos_emb = torch.cholesky_solve(f.reshape(b, h2 * w2, d), L_t, upper=False)
+            except (NotImplementedError, RuntimeError):
+                K_yy_inv = torch.linalg.inv(K_yy + sigma_noise)
+                pos_emb = K_yy_inv @ f.reshape(b, h2 * w2, d)
             mu_x = K_xy @ pos_emb
         mu_x = rearrange(mu_x, "b (h w) d -> b d h w", h=h1, w=w1)
 
