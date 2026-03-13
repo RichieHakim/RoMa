@@ -26,10 +26,39 @@
 </p>
 
 ## Setup/Install
-In your python environment (tested on Linux python 3.10), run:
+In your python environment (tested on Linux python 3.12), run:
 ```bash
-pip install -e .
+uv pip install -e .
 ```
+or 
+```bash
+uv sync
+```
+You can also install `romatch` directly as a package from PyPI by
+```bash
+uv pip install romatch
+```
+or 
+```bash
+uv add romatch
+```
+
+## Fused local correlation kernel
+Include the `--extra fused-local-corr` flag as:
+```bash
+uv sync --extra fused-local-corr
+```
+or 
+```bash
+uv pip install romatch[fused-local-corr]
+```
+or
+```bash
+uv add romatch[fused-local-corr]
+```
+
+
+
 ## Demo / How to Use
 We provide two demos in the [demos folder](demo).
 Here's the gist of it:
@@ -111,13 +140,24 @@ IMC22 :'):
 | Tiny RoMa v1    | 42.2 |
 | RoMa    |  -   |
 
+## Reproducibility
+There are a few diffs in the current codebase compared to the original repo used to run experiments.
+
+1. The `scale_factor` used in the `match` method now is relative to the original training resolution of `560`. Previosly it was based on the set coarse resolution (which might or might not be `560`).
+2. Newer PyTorch, original code used something like `2.1`.
+3. Stochastic eval: both RANSAC and the chosen correspondences can affect results in `Mega1500`.
+4. Matrix inverse in GP has been replaced with cholesky decomp.
+
+That being said, if diff of results are $>0.5$ there probably is something wrong, please let me know.
+
+
 ## BibTeX
 If you find our models useful, please consider citing our paper!
 ```
-@article{edstedt2024roma,
+@inproceedings{edstedt2024roma,
 title={{RoMa: Robust Dense Feature Matching}},
 author={Edstedt, Johan and Sun, Qiyu and Bökman, Georg and Wadenbäck, Mårten and Felsberg, Michael},
-journal={IEEE Conference on Computer Vision and Pattern Recognition},
+booktitle={IEEE Conference on Computer Vision and Pattern Recognition},
 year={2024}
 }
 ```
