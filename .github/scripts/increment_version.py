@@ -18,10 +18,12 @@ def increment_version(path: str):
 
     for i, line in enumerate(content):
         if line.startswith('__version__'):
-            version_match = re.search(r"'([^']*)'", line)
+            version_match = re.search(r"['\"]([^'\"]*)['\"]", line)
             if version_match:
                 current_version = version_match.group(1)
-                version_parts = current_version.split('.')
+                # Strip post-release suffix (e.g., ".post1") before incrementing
+                base_version = re.sub(r'\.post\d+$', '', current_version)
+                version_parts = base_version.split('.')
                 version_parts[-1] = str(int(version_parts[-1]) + 1)
                 new_version = '.'.join(version_parts)
                 content[i] = f"__version__ = '{new_version}'\n"

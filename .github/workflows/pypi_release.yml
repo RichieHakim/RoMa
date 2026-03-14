@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/project/romatch_roicat  # Replace <package-name> with your PyPI project name
+      url: https://pypi.org/project/romatch
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
 
@@ -49,7 +49,7 @@ jobs:
         name: python-package-distributions
         path: dist/
     - name: Publish distribution 📦 to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
+      uses: pypa/gh-action-pypi-publish@v1.12.4
 
   github-release:
     name: >-
@@ -97,5 +97,5 @@ jobs:
       run: >-
         gh release create "v$VERSION" 
         --title "v$VERSION" 
-        --notes "Release for version $VERSION. Also available on PyPI: https://pypi.org/project/romatch_roicat/$VERSION/"
+        --notes "Release for version $VERSION. Also available on PyPI: https://pypi.org/project/romatch/$VERSION/"
         --repo ${{ github.repository }}
