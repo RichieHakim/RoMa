@@ -41,6 +41,8 @@ jobs:
       url: https://pypi.org/project/romatch
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
+      attestations: write  # Required for attestations in v1.11+
+      contents: read
 
     steps:
     - name: Download all the dists
@@ -50,6 +52,8 @@ jobs:
         path: dist/
     - name: Publish distribution 📦 to PyPI
       uses: pypa/gh-action-pypi-publish@v1.12.4
+      with:
+        attestations: false
 
   github-release:
     name: >-
