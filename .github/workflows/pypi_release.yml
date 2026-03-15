@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/project/romatch
+      url: https://pypi.org/project/romatch_roicat
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
       attestations: write  # Required for attestations in v1.11+
@@ -102,5 +102,5 @@ jobs:
       run: >-
         gh release create "v$VERSION" 
         --title "v$VERSION" 
-        --notes "Release for version $VERSION. Also available on PyPI: https://pypi.org/project/romatch/$VERSION/"
+        --notes "Release for version $VERSION. Also available on PyPI: https://pypi.org/project/romatch_roicat/$VERSION/"
         --repo ${{ github.repository }}
